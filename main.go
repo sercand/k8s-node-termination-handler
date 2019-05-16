@@ -44,6 +44,7 @@ var (
 )
 
 func main() {
+	fmt.Println("START NODE TERMINATION HANDLER")
 	if home := os.Getenv("HOME"); home != "" {
 		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
 	} else {

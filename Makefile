@@ -40,4 +40,9 @@ presubmit: vet
 push:
 	docker push ${REGISTRY}/${IMAGE}:${TAG}
 
-.PHONY: all format vet presubmit build container push
+buildandpush:
+	@echo ">> building using docker => ${REGISTRY}/${IMAGE}:${TAG}"
+	@$(DOCKER) build -t ${REGISTRY}/${IMAGE}:${TAG} -f Dockerfile.build .
+	@$(DOCKER) push ${REGISTRY}/${IMAGE}:${TAG}
+
+.PHONY: all format vet presubmit build container push buildandpush
