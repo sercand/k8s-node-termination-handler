@@ -55,8 +55,7 @@ func (p *podEvictionHandler) EvictPods(excludePods map[string]string) error {
 	for k := range excludePods {
 		query = append(query, fields.ParseSelectorOrDie("metadata.name!="+k))
 	}
-	// Evict regular pods first.
-	gracePeriod := int64(30)
+	gracePeriod := int64(0)
 	deleteOptions := &metav1.DeleteOptions{GracePeriodSeconds: &gracePeriod}
 	doptions := metav1.ListOptions{FieldSelector: fields.AndSelectors(query...).String()}
 	err := p.client.RESTClient().Delete().
