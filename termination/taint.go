@@ -19,7 +19,6 @@ import (
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	client "k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/record"
 	"k8s.io/kubernetes/pkg/apis/core/helper"
 )
 
@@ -28,7 +27,6 @@ type nodeTaintHandler struct {
 	annotation string
 	node       string
 	client     *client.Clientset
-	recorder   record.EventRecorder
 }
 
 const (
@@ -36,13 +34,12 @@ const (
 	untaintReason = "NoImpendingNodeTermination"
 )
 
-func NewNodeTaintHandler(taint *v1.Taint, annotation, node string, client *client.Clientset, recorder record.EventRecorder) NodeTaintHandler {
+func NewNodeTaintHandler(taint *v1.Taint, annotation, node string, client *client.Clientset) NodeTaintHandler {
 	return &nodeTaintHandler{
 		taint:      taint,
 		annotation: annotation,
 		node:       node,
 		client:     client,
-		recorder:   recorder,
 	}
 }
 
@@ -70,7 +67,6 @@ func (n *nodeTaintHandler) ApplyTaint() error {
 			glog.V(2).Infof("Failed to update node object: %v", err)
 			return err
 		}
-		n.recorder.Event(node, v1.EventTypeWarning, taintReason, "Node about to be terminated. Tainting the node to prevent further pods from being scheduling on the node")
 	}
 	return nil
 }
@@ -92,8 +88,6 @@ func (n *nodeTaintHandler) RemoveTaint() error {
 		if _, err = n.client.CoreV1().Nodes().Update(node); err != nil {
 			return err
 		}
-		// Log an event that a termination is impending.
-		n.recorder.Eventf(node, v1.EventTypeNormal, untaintReason, "Removing impending termination taint")
 	}
 	return nil
 }

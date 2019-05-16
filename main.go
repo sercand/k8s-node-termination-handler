@@ -22,16 +22,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/GoogleCloudPlatform/k8s-node-termination-handler/termination"
+	"github.com/sercand/k8s-node-termination-handler/termination"
 	"github.com/golang/glog"
-
 	"k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
-	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/tools/record"
 )
 
 const eventSource = "NodeTerminationHandler"
@@ -70,17 +66,13 @@ func main() {
 		glog.Fatal(err)
 	}
 	glog.Infof("Excluding pods %v", excludePods)
-	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartLogging(glog.Infof)
-	eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: client.CoreV1().Events("")})
-	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: eventSource})
 	gceTerminationSource, err := termination.NewGCETerminationSource(*regularVMTimeoutVar)
 	if err != nil {
 		glog.Fatal(err)
 	}
 	nodeName := gceTerminationSource.GetState().NodeName
-	taintHandler := termination.NewNodeTaintHandler(taint, *annotationVar, nodeName, client, recorder)
-	evictionHandler := termination.NewPodEvictionHandler(nodeName, client, recorder, *systemPodGracePeriodVar)
+	taintHandler := termination.NewNodeTaintHandler(taint, *annotationVar, nodeName, client)
+	evictionHandler := termination.NewPodEvictionHandler(nodeName, client, *systemPodGracePeriodVar)
 	terminationHandler := termination.NewNodeTerminationHandler(gceTerminationSource, taintHandler, evictionHandler, excludePods)
 	err = terminationHandler.Start()
 	if err != nil {

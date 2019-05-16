@@ -16,7 +16,6 @@ package termination
 
 import (
 	"reflect"
-	"syscall"
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -69,18 +68,7 @@ func (n *nodeTerminationHandler) processNodeState() error {
 	if err := n.podEvictionHandler.EvictPods(n.excludePods, timeout); err != nil {
 		return err
 	}
-	if n.currentNodeState.NeedsReboot {
-		glog.V(4).Infof("Rebooting the node")
-		return n.rebootNode()
-	}
 	return nil
-}
-
-func (n *nodeTerminationHandler) rebootNode() error {
-	// Sync the filesystem.
-	syscall.Sync()
-	// Reboot the node.
-	return syscall.Reboot(syscall.LINUX_REBOOT_CMD_RESTART2)
 }
 
 func (n *nodeTerminationHandler) Start() error {

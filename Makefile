@@ -13,14 +13,14 @@
 
 GO := go
 DOCKER := docker
-TAG?=$(shell git rev-parse HEAD)
-REGISTRY?=gcr.io/k8s-image-staging
+TAG?=$(shell git rev-parse --short HEAD)
+REGISTRY?=gcr.io/otsimocloud
 IMAGE=gke-node-termination-handler
 
 all: presubmit build
 
 build:
-	@echo ">> building using docker"
+	@echo ">> building using docker => ${REGISTRY}/${IMAGE}:${TAG}"
 	@$(DOCKER) build -t ${REGISTRY}/${IMAGE}:${TAG} -f Dockerfile.build .
 
 format:
