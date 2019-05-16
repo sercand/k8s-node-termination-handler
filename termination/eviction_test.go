@@ -15,13 +15,13 @@
 package termination
 
 import (
+	"fmt"
 	"testing"
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	fakekubeclientset "k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/tools/record"
 )
 
 type pod struct {
@@ -82,11 +82,9 @@ func TestEvictions(t *testing.T) {
 			podList.Items = append(podList.Items, makePod(p))
 		}
 		kubeClientset := fakekubeclientset.NewSimpleClientset(&podList)
-		recorder := record.NewFakeRecorder(20)
 		evictionHandler := &podEvictionHandler{
 			client:               kubeClientset.CoreV1(),
 			node:                 "localhost",
-			recorder:             recorder,
 			systemPodGracePeriod: 1,
 		}
 		excludePods := map[string]string{test.excludedPod.name: test.excludedPod.namespace}
@@ -101,4 +99,21 @@ func TestEvictions(t *testing.T) {
 			t.Fatalf("expected to see %d pods remaining, found %d remaining", len(test.remainingPods), len(pods.Items))
 		}
 	}
+}
+
+func TestSelector(t *testing.T) {
+	excludePods := map[string]string{
+		"abc": "kube-system",
+	}
+	query := []fields.Selector{
+		fields.OneTermEqualSelector("spec.nodeName", "the-node-name"),
+		fields.ParseSelectorOrDie("metadata.namespace!=kube-system"),
+	}
+	for k := range excludePods {
+		query = append(query, fields.ParseSelectorOrDie("metadata.name!="+k))
+	}
+	doptions := metav1.ListOptions{
+		FieldSelector: fields.AndSelectors(query...).String(),
+	}
+	fmt.Println(doptions.FieldSelector)
 }

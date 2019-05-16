@@ -54,18 +54,12 @@ func (n *nodeTerminationHandler) processNodeState() error {
 	// Handle a node that is about to be terminated.
 	// Log an event that a termination is impending.
 	// Reserve some time for restarting the node.
-	timeout := n.currentNodeState.TerminationTime.Sub(time.Now())
-	// If the timeout is lesser than 2 minutes it is assumed that there isn't much time to reserve for restarts.
-	// By default such nodes are preemptible nodes which do not benefit from node restarts.
-	if timeout.Seconds() >= 120 {
-		timeout = timeout - time.Minute
-	}
 	glog.V(4).Infof("Applying taint prior to handling termination")
 	if err := n.taintHandler.ApplyTaint(); err != nil {
 		return err
 	}
 	glog.V(4).Infof("Evicting all pods from the node")
-	if err := n.podEvictionHandler.EvictPods(n.excludePods, timeout); err != nil {
+	if err := n.podEvictionHandler.EvictPods(n.excludePods); err != nil {
 		return err
 	}
 	return nil

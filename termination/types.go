@@ -49,7 +49,7 @@ type PodEvictionHandler interface {
 	// EvictPods deletes all pods except the ones included in `excludePods`
 	// `excludePods` is a map where the key is pod name and value is pod namespace.
 	// `timeout` is the overall time available to evict all pods.
-	EvictPods(excludePods map[string]string, timeout time.Duration) error
+	EvictPods(excludePods map[string]string) error
 }
 
 // NodeTerminationHandler is an abstract representation of objects that can handle node terminations gracefully.

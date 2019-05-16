@@ -18,10 +18,10 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	client "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
@@ -47,37 +47,26 @@ func NewPodEvictionHandler(node string, client *client.Clientset, systemPodGrace
 	}
 }
 
-func (p *podEvictionHandler) EvictPods(excludePods map[string]string, timeout time.Duration) error {
-	options := metav1.ListOptions{FieldSelector: fields.OneTermEqualSelector("spec.nodeName", p.node).String()}
-	pods, err := p.client.Pods(metav1.NamespaceAll).List(options)
-	if err != nil {
-		glog.V(2).Infof("Failed to list pods - %v", err)
-		return err
+func (p *podEvictionHandler) EvictPods(excludePods map[string]string) error {
+	query := []fields.Selector{
+		fields.OneTermEqualSelector("spec.nodeName", p.node),
+		fields.ParseSelectorOrDie("metadata.namespace!=kube-system"),
 	}
-	var regularPods []v1.Pod
-	// Separate pods in kube-system namespace such that they can be evicted at the end.
-	// This is especially helpful in scenarios like reclaiming logs prior to node termination.
-	for _, pod := range pods.Items {
-		if ns, exists := excludePods[pod.Name]; !exists || ns != pod.Namespace {
-			if pod.Namespace != systemNamespace {
-				regularPods = append(regularPods, pod)
-			}
-		}
+	for k := range excludePods {
+		query = append(query, fields.ParseSelectorOrDie("metadata.name!="+k))
 	}
 	// Evict regular pods first.
 	gracePeriod := int64(30)
 	deleteOptions := &metav1.DeleteOptions{GracePeriodSeconds: &gracePeriod}
-	if err := p.deletePods(regularPods, deleteOptions); err != nil {
-		return err
-	}
-	glog.V(4).Infof("Successfully evicted all pods from node %q", p.node)
-	return nil
-}
+	doptions := metav1.ListOptions{FieldSelector: fields.AndSelectors(query...).String()}
+	err := p.client.RESTClient().Delete().
+		Namespace(metav1.NamespaceAll).
+		Resource("pods").
+		VersionedParams(&doptions, scheme.ParameterCodec).
+		Body(deleteOptions).
+		Do().
+		Error()
 
-func (p *podEvictionHandler) deletePods(pods []v1.Pod, deleteOptions *metav1.DeleteOptions) error {
-	for _, pod := range pods {
-		glog.V(4).Infof("About to delete pod %q in namespace %q", pod.Name, pod.Namespace)
-		go p.client.Pods(pod.Namespace).Delete(pod.Name, deleteOptions)
-	}
-	return nil
+	glog.V(4).Infof("Successfully evicted all pods from node %q", p.node)
+	return err
 }

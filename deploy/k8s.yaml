@@ -51,7 +51,7 @@ spec:
           args:
           - "--logtostderr"
           - "--exclude-pods=$(POD_NAME):$(POD_NAMESPACE)"
-          - "-v=10"
+          - "-v=3"
           - "--taint=cloud.google.com/impending-node-termination::NoSchedule"
           env:
             - name: POD_NAME
