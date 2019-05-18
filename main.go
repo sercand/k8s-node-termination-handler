@@ -17,13 +17,14 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/sercand/k8s-node-termination-handler/termination"
 	"github.com/golang/glog"
+	"github.com/sercand/k8s-node-termination-handler/termination"
 	"k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -73,8 +74,17 @@ func main() {
 	}
 	nodeName := gceTerminationSource.GetState().NodeName
 	taintHandler := termination.NewNodeTaintHandler(taint, *annotationVar, nodeName, client)
-	evictionHandler := termination.NewPodEvictionHandler(nodeName, client, *systemPodGracePeriodVar)
+	evictionHandler := termination.NewPodEvictionHandler(nodeName, client)
 	terminationHandler := termination.NewNodeTerminationHandler(gceTerminationSource, taintHandler, evictionHandler, excludePods)
+	http.HandleFunc("/evict", func(w http.ResponseWriter, r *http.Request) {
+		err := evictionHandler.EvictPods(excludePods)
+		if err != nil {
+			glog.Errorf("failed to evict pods: %v", err)
+		} else {
+			glog.Infof("Pods are evicted")
+		}
+	})
+	go http.ListenAndServe(":8080", nil)
 	err = terminationHandler.Start()
 	if err != nil {
 		glog.Fatal(err)

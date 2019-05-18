@@ -15,9 +15,8 @@
 package termination
 
 import (
-	"time"
-
 	"github.com/golang/glog"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	client "k8s.io/client-go/kubernetes"
@@ -27,45 +26,65 @@ import (
 
 const (
 	systemNamespace = "kube-system"
-	eventReason     = "NodeTermination"
 )
 
 type podEvictionHandler struct {
-	client               corev1.CoreV1Interface
-	node                 string
-	systemPodGracePeriod time.Duration
+	client corev1.CoreV1Interface
+	node   string
 }
 
 // List all pods on the node
 // Evict all pods on the node not in kube-system namespace
 // Return nil on success
-func NewPodEvictionHandler(node string, client *client.Clientset, systemPodGracePeriod time.Duration) PodEvictionHandler {
+func NewPodEvictionHandler(node string, client *client.Clientset) PodEvictionHandler {
 	return &podEvictionHandler{
-		client:               client.CoreV1(),
-		node:                 node,
-		systemPodGracePeriod: systemPodGracePeriod,
+		client: client.CoreV1(),
+		node:   node,
 	}
 }
 
 func (p *podEvictionHandler) EvictPods(excludePods map[string]string) error {
 	query := []fields.Selector{
 		fields.OneTermEqualSelector("spec.nodeName", p.node),
-		fields.ParseSelectorOrDie("metadata.namespace!=kube-system"),
+		fields.ParseSelectorOrDie("metadata.namespace!=" + systemNamespace),
 	}
 	for k := range excludePods {
 		query = append(query, fields.ParseSelectorOrDie("metadata.name!="+k))
 	}
 	gracePeriod := int64(0)
 	deleteOptions := &metav1.DeleteOptions{GracePeriodSeconds: &gracePeriod}
-	doptions := metav1.ListOptions{FieldSelector: fields.AndSelectors(query...).String()}
-	err := p.client.RESTClient().Delete().
+
+	loptions := metav1.ListOptions{FieldSelector: fields.AndSelectors(query...).String()}
+
+	result := &v1.PodList{}
+	err := p.client.RESTClient().Get().
 		Namespace(metav1.NamespaceAll).
 		Resource("pods").
-		VersionedParams(&doptions, scheme.ParameterCodec).
-		Body(deleteOptions).
+		VersionedParams(&loptions, scheme.ParameterCodec).
 		Do().
-		Error()
-
-	glog.V(4).Infof("Successfully evicted all pods from node %q", p.node)
-	return err
+		Into(result)
+	if err != nil {
+		glog.V(2).Infof("Failed to list pods on node %s, got error=%v", p.node,err)
+		return err
+	}
+	nss := map[string]bool{}
+	for _, x := range result.Items {
+		nss[x.Namespace] = true
+	}
+	for ns := range nss {
+		err = p.client.RESTClient().Delete().
+			Throttle(nil).
+			Namespace(ns).
+			Resource("pods").
+			VersionedParams(&loptions, scheme.ParameterCodec).
+			Body(deleteOptions).
+			Do().
+			Error()
+		if err != nil {
+			glog.V(2).Infof("Failed to remove pods on node %s of namespace %s error=%v", p.node, ns, err)
+			return err
+		}
+	}
+	glog.V(1).Infof("Successfully evicted all pods from node %q", p.node)
+	return nil
 }
